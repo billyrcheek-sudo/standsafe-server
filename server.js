@@ -25,13 +25,13 @@ app.post('/api/trip', (req, res) => { const t = req.body; if (!t.id) return res.
 app.post('/api/trip/:id/ping', (req, res) => { const t = trips[req.params.id]; if (!t) return res.status(404).end();
   t.last = { lat: req.body.lat, lng: req.body.lng, at: Date.now() }; (t.trail = t.trail || []).push([req.body.lat, req.body.lng]); t.trail = t.trail.slice(-500); save(); res.json({ ok: true }); });
 app.post('/api/trip/:id/safe', async (req, res) => { const t = trips[req.params.id]; if (!t) return res.status(404).end();
-  if (t.alerted) await sms(t.contacts, `UPDATE: ${t.name} has checked in safe. Disregard the earlier alert.`);
+  if (t.alerted) await sms(t.contacts, `StandSafe Update: ${t.name} has checked in safe. Please disregard the earlier alert. Reply STOP to opt out.`);
   t.status = 'done'; save(); res.json({ ok: true }); });
 app.post('/api/trip/:id/extend', (req, res) => { const t = trips[req.params.id]; if (!t) return res.status(404).end();
   t.dueAt = Date.now() + (req.body.minutes || 30) * 60000; t.warned = false; save(); res.json({ ok: true, dueAt: t.dueAt }); });
 app.post('/api/trip/:id/sos', async (req, res) => { const t = trips[req.params.id]; if (!t) return res.status(404).end();
   if (req.body.lat) t.last = { lat: req.body.lat, lng: req.body.lng, at: Date.now() };
-  t.alerted = true; save(); await sms(t.contacts, `SOS from ${t.name} via StandSafe. GPS: ${loc(t)}${info(t)}. Call 911 if you cannot reach them.`); res.json({ ok: true }); });
+  t.alerted = true; save(); await sms(t.contacts, `SOS from ${t.name} via StandSafe. GPS: ${loc(t)}${info(t)}. If you cannot reach them, call 911. Reply STOP to opt out.`); res.json({ ok: true }); });
 app.get('/api/trip/:id', (req, res) => res.json(trips[req.params.id] || {}));
 app.get('/', (_, res) => res.send('StandSafe server running'));
 
@@ -40,6 +40,6 @@ setInterval(async () => { const now = Date.now();
   for (const t of Object.values(trips)) { if (t.status !== 'active') continue;
     const deadline = t.dueAt + (t.graceMin || 15) * 60000;
     if (!t.alerted && now > deadline) { t.alerted = true; save();
-      await sms(t.contacts, `STANDSAFE ALERT: ${t.name} did not check in (due ${new Date(t.dueAt).toLocaleTimeString('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit'})}). Last GPS: ${loc(t)}${info(t)}. Try calling them; if no answer, call 911 and give these coordinates.`); }
+      await sms(t.contacts, `StandSafe Alert: ${t.name} did not check in from their hunt by ${new Date(t.dueAt).toLocaleTimeString('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit'})}). Last GPS: ${loc(t)}${info(t)}. Try calling them. If you cannot reach them, call 911 and give these coordinates. Reply STOP to opt out.`); }
   } }, 30000);
 app.listen(PORT, () => console.log('StandSafe server on', PORT, twilio ? '(Twilio live)' : '(dry-run: no Twilio keys)'));
