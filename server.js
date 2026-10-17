@@ -33,6 +33,17 @@ app.post('/api/trip/:id/sos', async (req, res) => { const t = trips[req.params.i
   if (req.body.lat) t.last = { lat: req.body.lat, lng: req.body.lng, at: Date.now() };
   t.alerted = true; save(); await sms(t.contacts, `SOS from ${t.name} via StandSafe. GPS: ${loc(t)}${info(t)}. If you cannot reach them, call 911. Reply STOP to opt out.`); res.json({ ok: true }); });
 app.get('/api/trip/:id', (req, res) => res.json(trips[req.params.id] || {}));
+// Public SMS opt-in form endpoint (emergency contacts give consent here)
+const OPT = __dirname + '/optins.json';
+let optins = fs.existsSync(OPT) ? JSON.parse(fs.readFileSync(OPT)) : [];
+app.post('/optin', async (req, res) => { const { name, phone, hunter, consent } = req.body || {};
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!consent || digits.length < 10 || !name) return res.status(400).json({ error: 'Name, a valid mobile number, and the consent checkbox are required.' });
+  const e164 = '+1' + digits.slice(-10);
+  optins.push({ name, phone: e164, hunter: hunter || '', consent: true, at: new Date().toISOString(), ip: req.ip });
+  fs.writeFileSync(OPT, JSON.stringify(optins, null, 1));
+  await sms([e164], "StandSafe: You're now an emergency contact. You'll only get texts if your hunter misses a check-in or presses SOS. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.");
+  res.json({ ok: true }); });
 app.get('/', (_, res) => res.send('StandSafe server running'));
 
 // Every 30 seconds: check for missed check-ins.
