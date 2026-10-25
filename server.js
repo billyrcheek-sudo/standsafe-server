@@ -33,18 +33,18 @@ const info = t => `${t.stand ? ' | Stand: ' + t.stand : ''}${t.vehicle ? ' | Veh
 
 // Start or update a trip: { id, name, contacts:[...], dueAt (ms), graceMin, stand, vehicle, parking, gate, medical, lat, lng }
 app.post('/api/trip', (req, res) => { const t = req.body; if (!t.id) return res.status(400).end();
-  trips[t.id] = { ...(trips[t.id] || {}), ...t, status: 'active', warned: false, alerted: false, last: t.lat ? { lat: t.lat, lng: t.lng, at: Date.now() } : (trips[t.id] || {}).last };
-  save(); res.json({ ok: true, contacts: (t.contacts || []).map(consentStatus) }); });
+  trips[t.id] = { ...(trips[t.id] || {}), ...t, status: 'active', warned: false, alerted: false, sos: false, last: t.lat ? { lat: t.lat, lng: t.lng, at: Date.now() } : (trips[t.id] || {}).last };
+  save(); res.json({ ok: true, dueAt: trips[t.id].dueAt, alertAt: trips[t.id].dueAt + (trips[t.id].graceMin || 15) * 60000, contacts: (t.contacts || []).map(consentStatus) }); });
 app.post('/api/trip/:id/ping', (req, res) => { const t = trips[req.params.id]; if (!t) return res.status(404).end();
   t.last = { lat: req.body.lat, lng: req.body.lng, at: Date.now() }; (t.trail = t.trail || []).push([req.body.lat, req.body.lng]); t.trail = t.trail.slice(-500); save(); res.json({ ok: true }); });
 app.post('/api/trip/:id/safe', async (req, res) => { const t = trips[req.params.id]; if (!t) return res.status(404).end();
-  if (t.alerted) await sms(t.contacts, `StandSafe Update: ${t.name} has checked in safe. Please disregard the earlier alert. Reply STOP to opt out.`);
+  if (t.alerted || t.sos) await sms(t.contacts, `StandSafe Update: ${t.name} has checked in safe. Please disregard the earlier alert. Reply STOP to opt out.`);
   t.status = 'done'; save(); res.json({ ok: true }); });
 app.post('/api/trip/:id/extend', (req, res) => { const t = trips[req.params.id]; if (!t) return res.status(404).end();
   t.dueAt = Date.now() + (req.body.minutes || 30) * 60000; t.warned = false; save(); res.json({ ok: true, dueAt: t.dueAt }); });
 app.post('/api/trip/:id/sos', async (req, res) => { const t = trips[req.params.id]; if (!t) return res.status(404).end();
   if (req.body.lat) t.last = { lat: req.body.lat, lng: req.body.lng, at: Date.now() };
-  t.alerted = true; save(); await sms(t.contacts, `SOS from ${t.name} via StandSafe. GPS: ${loc(t)}${info(t)}. If you cannot reach them, call 911. Reply STOP to opt out.`); res.json({ ok: true }); });
+  t.sos = true; save(); await sms(t.contacts, `SOS from ${t.name} via StandSafe. GPS: ${loc(t)}${info(t)}. If you cannot reach them, call 911. Reply STOP to opt out.`); res.json({ ok: true }); });
 app.get('/api/trip/:id', (req, res) => res.json(trips[req.params.id] || {}));
 // Public SMS opt-in form endpoint (emergency contacts give consent here)
 let optins = [];
